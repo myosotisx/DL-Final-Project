@@ -1,4 +1,4 @@
-from resnet_mod import resnet50_mod
+from .resnet_mod import resnet50_mod
 
 
 def model():

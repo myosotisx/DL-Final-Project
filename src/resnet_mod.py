@@ -1,12 +1,12 @@
+import math
+
 import torch
 import torch.nn as nn
 from torchvision.models.utils import load_state_dict_from_url
 
-
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
            'resnet152', 'resnext50_32x4d', 'resnext101_32x8d',
            'wide_resnet50_2', 'wide_resnet101_2']
-
 
 model_urls = {
     'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
@@ -125,7 +125,7 @@ class ResizeMapBlock(nn.Module):
         self.paths = nn.ModuleList([
             nn.Sequential(
                 nn.MaxPool2d(ratios[i]),
-                nn.Conv2d(channels[i], num_classes, conv_shape, stride=1, padding=conv_shape//2)
+                nn.Conv2d(channels[i], num_classes, conv_shape, stride=1, padding=conv_shape // 2)
             )
             for i in range(self.paths_num)
         ])
@@ -133,6 +133,25 @@ class ResizeMapBlock(nn.Module):
     def forward(self, x):
         output = torch.cat([self.paths[i](x[i]) for i in range(self.paths_num)], 1)
         return output
+
+
+class AttentionBlock(nn.Module):
+
+    def __init__(self, ratio, channel, conv_shape):
+        super(AttentionBlock, self).__init__()
+        mid_channel = int(math.sqrt(channel))
+        self.path = nn.Sequential(
+            nn.MaxPool2d(ratio),
+            nn.Conv2d(channel, mid_channel, conv_shape, stride=1, padding=conv_shape // 2),
+            nn.BatchNorm2d(mid_channel),
+            nn.ReLU(),
+            nn.Conv2d(mid_channel, 1, conv_shape, stride=1, padding=conv_shape // 2),
+        )
+        self.softmax = nn.Softmax(dim=2)
+
+    def forward(self, x):
+        output = self.path(x)
+        return self.softmax(output.view(output.size(0), output.size(1), -1)).view_as(output)
 
 
 class ResNetMod(nn.Module):
@@ -171,15 +190,20 @@ class ResNetMod(nn.Module):
         # self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         # self.fc = nn.Linear(512 * block.expansion, num_classes)
 
+        ## attention module
+        self.atten = AttentionBlock(1, 2048, 3)
+
         # modify
         self.num_classes = num_classes  # CIFAR 10 num_classes = 10
         self.resizeMap = ResizeMapBlock([8, 4, 2, 1], [256, 512, 1024, 2048], self.num_classes, 3)
-        self.cat_channels = 4*self.num_classes
+        self.cat_channels = 4 * self.num_classes
         self.remap = nn.Sequential(
             nn.BatchNorm2d(self.cat_channels),
             nn.Conv2d(self.cat_channels, self.num_classes, 3, stride=1, padding=1),
             nn.Softmax2d()
         )
+
+        self.probSoft = nn.Softmax(dim=-1)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -243,7 +267,15 @@ class ResNetMod(nn.Module):
         isl = self.resizeMap([l1, l2, l3, l4])
         rml = self.remap(isl)
 
-        return rml
+        ## attention map
+        att = self.atten(l4)
+
+        output = (att * rml).view(rml.size(0), rml.size(1), -1).sum(-1)
+
+        output = self.probSoft(output)
+
+        # return N * num_classes
+        return output
 
         # x = self.avgpool(x)
         # x = torch.flatten(x, 1)
@@ -298,6 +330,7 @@ def resnet50(pretrained=False, progress=True, **kwargs):
     """
     return _resnet('resnet50', Bottleneck, [3, 4, 6, 3], pretrained, progress,
                    **kwargs)
+
 
 def resnet50_mod(pretrained=False, progress=True, **kwargs):
     r"""ResNet-50 model from

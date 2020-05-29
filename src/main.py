@@ -3,7 +3,7 @@ from torch import nn, optim
 from torch.utils.tensorboard import SummaryWriter
 
 import data
-import model
+import src.model as model
 
 import time
 
@@ -23,7 +23,8 @@ if __name__ == "__main__":
     )
 
     # test size match
-    # for inputs, labels in train_loader:
-    #     print(type(inputs))
-    #     outputs = model(inputs)
-    #     break
+    for inputs, labels in train_loader:
+        outputs = model(inputs)
+        print(outputs)
+        print(outputs.size())
+        break
