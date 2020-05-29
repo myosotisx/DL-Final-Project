@@ -203,8 +203,6 @@ class ResNetMod(nn.Module):
             nn.Softmax2d()
         )
 
-        self.probSoft = nn.Softmax(dim=-1)
-
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
@@ -271,8 +269,6 @@ class ResNetMod(nn.Module):
         att = self.atten(l4)
 
         output = (att * rml).view(rml.size(0), rml.size(1), -1).sum(-1)
-
-        output = self.probSoft(output)
 
         # return N * num_classes
         return output
