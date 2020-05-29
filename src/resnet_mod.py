@@ -193,6 +193,9 @@ class ResNetMod(nn.Module):
         ## attention module
         self.atten = AttentionBlock(1, 2048, 3)
 
+        ## auxiliary layer for calculating M_hat, same as attention module
+        self.auxiliary_layer = AttentionBlock(1, 2048, 3)
+
         # modify
         self.num_classes = num_classes  # CIFAR 10 num_classes = 10
         self.resizeMap = ResizeMapBlock([8, 4, 2, 1], [256, 512, 1024, 2048], self.num_classes, 3)
@@ -268,10 +271,13 @@ class ResNetMod(nn.Module):
         ## attention map
         att = self.atten(l4)
 
+        ## M_hat
+        M_hat = self.auxiliary_layer(l4)
+
         output = (att * rml).view(rml.size(0), rml.size(1), -1).sum(-1)
 
-        # return N * num_classes
-        return output
+        # return N * num_classes and M_hat(H_0 * W_0)
+        return output, M_hat
 
         # x = self.avgpool(x)
         # x = torch.flatten(x, 1)

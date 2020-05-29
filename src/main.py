@@ -37,6 +37,8 @@ if __name__ == "__main__":
     train_loader, test_loader = data.load_data(batch_size=64)
     model = model.model()
 
+    criterion_lss1 = nn.BCELoss()
+
     # time_str = time.strftime("%m_%d-%Hh%Mm%Ss", time.localtime())
     # tb_writer = SummaryWriter(log_dir="../log/%s" % time_str)
     # data_iter = iter(train_loader)
@@ -46,6 +48,7 @@ if __name__ == "__main__":
     #     {'Training': 1, 'Validation': 1},
     #     1
     # )
+
 
     # test size match
     for inputs, labels in train_loader:
@@ -63,8 +66,17 @@ if __name__ == "__main__":
         lam = ((bbx2 - bbx1) * (bby2 - bby1) / (inputs.size()[-1] * inputs.size()[-2]))
         y_cutmix = lam * y_a + (1 - lam) * y_original
 
-        # outputs = model(inputs)
-        # print(outputs)
-        # print(outputs.size())
+        outputs, M_hat = model(inputs)
+
+        # Resize M to H0 * W0
+        M = M.unsqueeze(dim=0).unsqueeze(dim=1)
+        M = M.repeat(inputs.size()[0], 1, 1, 1)
+        print(M.size())
+        M_resizer = torch.nn.MaxPool2d(int(M.size()[-1] / M_hat.size()[-1]))
+        M = M_resizer(M)
+
+        print(outputs.size())
+        lss_1 = criterion_lss1(M_hat, M)
+        print(lss_1)
         break
 
