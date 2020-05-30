@@ -187,8 +187,9 @@ class ResNetMod(nn.Module):
                                        dilate=replace_stride_with_dilation[1])
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
                                        dilate=replace_stride_with_dilation[2])
-        # self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        # self.fc = nn.Linear(512 * block.expansion, num_classes)
+
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(512 * block.expansion, num_classes)
 
         ## attention module
         self.atten = AttentionBlock(1, 2048, 3)
@@ -275,14 +276,13 @@ class ResNetMod(nn.Module):
 
         output = (att * rml).view(rml.size(0), rml.size(1), -1).sum(-1)
 
+        # output of avg pool method
+        pool_output = self.avgpool(l4)
+        pool_output = torch.flatten(pool_output, 1)
+        pool_output = self.fc(pool_output)
+
         # return N * num_classes and M_hat(H_0 * W_0) and Spatial Logits
-        return output, M_hat, rml
-
-        # x = self.avgpool(x)
-        # x = torch.flatten(x, 1)
-        # x = self.fc(x)
-
-        # return x
+        return output, pool_output, M_hat, rml
 
     def forward(self, x):
         return self._forward_impl(x)

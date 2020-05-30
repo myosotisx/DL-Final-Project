@@ -1,15 +1,10 @@
-import torch
-from torch import nn, optim
-from torch.utils.tensorboard import SummaryWriter
-import torch.nn.functional as F
-
-
 import numpy as np
+import torch
+import torch.nn.functional as F
+from torch import nn
 
 import data
 import src.model as model
-
-import time
 
 
 def rand_bbox(size, lam):
@@ -33,12 +28,12 @@ if __name__ == "__main__":
     # Hyperparameter for Cutmix
     cutmix_beta = 0.3
 
-
     train_loader, test_loader = data.load_data(batch_size=64)
     model = model.model()
 
     criterion_lss1 = nn.BCELoss()
     criterion_lss2 = nn.KLDivLoss(reduction='batchmean')
+    criterion_ce = nn.CrossEntropyLoss()
 
     # time_str = time.strftime("%m_%d-%Hh%Mm%Ss", time.localtime())
     # tb_writer = SummaryWriter(log_dir="../log/%s" % time_str)
@@ -49,7 +44,6 @@ if __name__ == "__main__":
     #     {'Training': 1, 'Validation': 1},
     #     1
     # )
-
 
     # test size match
     for inputs, labels in train_loader:
@@ -70,10 +64,10 @@ if __name__ == "__main__":
         # x_a
         model.eval()
         with torch.no_grad():
-            _dummy1, _dummy2, Y_a = model(x_a)
+            _dummy1, _dummy2, _dummpy3, Y_a = model(x_a)
         # CutMix
         model.train(True)
-        outputs, M_hat, Y_cutmix = model(inputs)
+        outputs, pool_outputs, M_hat, Y_cutmix = model(inputs)
 
         # Resize M to H0 * W0
         M = M.unsqueeze(dim=0).unsqueeze(dim=1)
@@ -81,9 +75,12 @@ if __name__ == "__main__":
         M_resizer = torch.nn.MaxPool2d(int(M.size()[-1] / M_hat.size()[-1]))
         M = M_resizer(M)
 
+        lsl = criterion_ce(outputs, labels)
         lss_1 = criterion_lss1(M_hat, M)
-        print(lss_1)
         lss_2 = criterion_lss2(M[0, 0, :, :] * Y_cutmix, M[0, 0, :, :] * Y_a)
+        lsd = criterion_lss2(outputs, pool_outputs) + 0.5 * criterion_ce(pool_outputs, labels)
+        print(lsl)
+        print(lss_1)
         print(lss_2)
+        print(lsd)
         break
-
