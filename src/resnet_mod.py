@@ -267,7 +267,6 @@ class ResNetMod(nn.Module):
 
         isl = self.resizeMap([l1, l2, l3, l4])
         rml = self.remap(isl)
-
         ## attention map
         att = self.atten(l4)
 
@@ -276,8 +275,8 @@ class ResNetMod(nn.Module):
 
         output = (att * rml).view(rml.size(0), rml.size(1), -1).sum(-1)
 
-        # return N * num_classes and M_hat(H_0 * W_0)
-        return output, M_hat
+        # return N * num_classes and M_hat(H_0 * W_0) and Spatial Logits
+        return output, M_hat, rml
 
         # x = self.avgpool(x)
         # x = torch.flatten(x, 1)

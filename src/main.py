@@ -38,6 +38,7 @@ if __name__ == "__main__":
     model = model.model()
 
     criterion_lss1 = nn.BCELoss()
+    criterion_lss2 = nn.KLDivLoss(reduction='batchmean')
 
     # time_str = time.strftime("%m_%d-%Hh%Mm%Ss", time.localtime())
     # tb_writer = SummaryWriter(log_dir="../log/%s" % time_str)
@@ -53,30 +54,36 @@ if __name__ == "__main__":
     # test size match
     for inputs, labels in train_loader:
         # CutMix regularizer
-        y_original = F.one_hot(labels, 10)
+        label_original = F.one_hot(labels, 10)
         lam = np.random.beta(cutmix_beta, cutmix_beta)
         rand_index = torch.randperm(inputs.size()[0])
         x_cutmix = inputs.clone().detach()
         x_a = inputs[rand_index, :, :, :]
-        y_a = y_original[rand_index, :]
+        label_a = label_original[rand_index, :]
         bbx1, bby1, bbx2, bby2 = rand_bbox(inputs.size(), lam)
         M = torch.zeros((inputs.size()[-2], inputs.size()[-1]))
         M[bbx1:bbx2, bby1:bby2] = 1
         x_cutmix[:, :, bbx1:bbx2, bby1:bby2] = x_a[:, :, bbx1:bbx2, bby1:bby2]
         lam = ((bbx2 - bbx1) * (bby2 - bby1) / (inputs.size()[-1] * inputs.size()[-2]))
-        y_cutmix = lam * y_a + (1 - lam) * y_original
+        label_cutmix = lam * label_a + (1 - lam) * label_original
 
-        outputs, M_hat = model(inputs)
+        # x_a
+        model.eval()
+        with torch.no_grad():
+            _dummy1, _dummy2, Y_a = model(x_a)
+        # CutMix
+        model.train(True)
+        outputs, M_hat, Y_cutmix = model(inputs)
 
         # Resize M to H0 * W0
         M = M.unsqueeze(dim=0).unsqueeze(dim=1)
         M = M.repeat(inputs.size()[0], 1, 1, 1)
-        print(M.size())
         M_resizer = torch.nn.MaxPool2d(int(M.size()[-1] / M_hat.size()[-1]))
         M = M_resizer(M)
 
-        print(outputs.size())
         lss_1 = criterion_lss1(M_hat, M)
         print(lss_1)
+        lss_2 = criterion_lss2(M[0, 0, :, :] * Y_cutmix, M[0, 0, :, :] * Y_a)
+        print(lss_2)
         break
 
