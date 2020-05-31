@@ -146,6 +146,7 @@ class AttentionBlock(nn.Module):
             nn.BatchNorm2d(mid_channel),
             nn.ReLU(),
             nn.Conv2d(mid_channel, 1, conv_shape, stride=1, padding=conv_shape // 2),
+            nn.Sigmoid()
         )
         self.softmax = nn.Softmax(dim=2)
 
