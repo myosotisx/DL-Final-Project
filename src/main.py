@@ -58,7 +58,8 @@ def train():
 
         # x_a
         model.eval()
-        _dummy1, _dummy2, _dummpy3, Y_a = model(x_a)
+        with torch.no_grad():
+            _dummy1, _dummy2, _dummpy3, Y_a = model(x_a)
         # CutMix
         model.train()
         optimizer.zero_grad()
@@ -108,55 +109,56 @@ def valid():
     tot_lss_2 = 0.0
     tot_lsd = 0.0
     model.eval()
-    for inputs, labels in valid_loader:
-        inputs = inputs.to(device)
-        labels = labels.to(device)
+    with torch.no_grad():
+        for inputs, labels in valid_loader:
+            inputs = inputs.to(device)
+            labels = labels.to(device)
 
-        # CutMix regularizer
-        label_original = F.one_hot(labels, 10)
-        lam = np.random.beta(cutmix_beta, cutmix_beta)
-        rand_index = torch.randperm(inputs.size()[0])
-        x_cutmix = inputs.clone().detach()
-        x_a = inputs[rand_index, :, :, :]
-        labels_a = labels[rand_index]
-        bbx1, bby1, bbx2, bby2 = rand_bbox(inputs.size(), lam)
-        M = torch.zeros((inputs.size()[-2], inputs.size()[-1]))
+            # CutMix regularizer
+            label_original = F.one_hot(labels, 10)
+            lam = np.random.beta(cutmix_beta, cutmix_beta)
+            rand_index = torch.randperm(inputs.size()[0])
+            x_cutmix = inputs.clone().detach()
+            x_a = inputs[rand_index, :, :, :]
+            labels_a = labels[rand_index]
+            bbx1, bby1, bbx2, bby2 = rand_bbox(inputs.size(), lam)
+            M = torch.zeros((inputs.size()[-2], inputs.size()[-1]))
 
-        M = M.to(device)
+            M = M.to(device)
 
-        M[bbx1:bbx2, bby1:bby2] = 1
-        x_cutmix[:, :, bbx1:bbx2, bby1:bby2] = x_a[:, :, bbx1:bbx2, bby1:bby2]
-        lam = ((bbx2 - bbx1) * (bby2 - bby1) / (inputs.size()[-1] * inputs.size()[-2]))
-        label_cutmix = lam * label_original[rand_index, :] + (1 - lam) * label_original
+            M[bbx1:bbx2, bby1:bby2] = 1
+            x_cutmix[:, :, bbx1:bbx2, bby1:bby2] = x_a[:, :, bbx1:bbx2, bby1:bby2]
+            lam = ((bbx2 - bbx1) * (bby2 - bby1) / (inputs.size()[-1] * inputs.size()[-2]))
+            label_cutmix = lam * label_original[rand_index, :] + (1 - lam) * label_original
 
-        # x_a
-        _dummy1, _dummy2, _dummpy3, Y_a = model(x_a)
-        # CutMix
-        outputs, pool_outputs, M_hat, Y_cutmix = model(x_cutmix)
+            # x_a
+            _dummy1, _dummy2, _dummpy3, Y_a = model(x_a)
+            # CutMix
+            outputs, pool_outputs, M_hat, Y_cutmix = model(x_cutmix)
 
-        # Resize M to H0 * W0
-        M = M.unsqueeze(dim=0).unsqueeze(dim=1)
-        M = M.repeat(inputs.size()[0], 1, 1, 1)
-        M_resizer = torch.nn.MaxPool2d(int(M.size()[-1] / M_hat.size()[-1]))
-        M = M_resizer(M)
+            # Resize M to H0 * W0
+            M = M.unsqueeze(dim=0).unsqueeze(dim=1)
+            M = M.repeat(inputs.size()[0], 1, 1, 1)
+            M_resizer = torch.nn.MaxPool2d(int(M.size()[-1] / M_hat.size()[-1]))
+            M = M_resizer(M)
 
-        lsl = lam * criterion_ce(outputs, labels_a) + (1 - lam) * criterion_ce(outputs, labels)
-        lss_1 = criterion_lss1(M_hat, M)
-        lss_2 = criterion_lss2(M[0, 0, :, :] * Y_cutmix, M[0, 0, :, :] * Y_a)
-        lsd = criterion_lss2(outputs, pool_outputs.detach()) + 0.5 * (
-                    lam * criterion_ce(pool_outputs, labels_a) + (1 - lam) * criterion_ce(pool_outputs, labels))
+            lsl = lam * criterion_ce(outputs, labels_a) + (1 - lam) * criterion_ce(outputs, labels)
+            lss_1 = criterion_lss1(M_hat, M)
+            lss_2 = criterion_lss2(M[0, 0, :, :] * Y_cutmix, M[0, 0, :, :] * Y_a)
+            lsd = criterion_lss2(outputs, pool_outputs.detach()) + 0.5 * (
+                        lam * criterion_ce(pool_outputs, labels_a) + (1 - lam) * criterion_ce(pool_outputs, labels))
 
-        loss = lsl + lss_1 + lss_2 + lsd
+            loss = lsl + lss_1 + lss_2 + lsd
 
-        _, preds = torch.max(outputs, 1)
-        _, labels = torch.max(label_cutmix, 1)
+            _, preds = torch.max(outputs, 1)
+            _, labels = torch.max(label_cutmix, 1)
 
-        tot_loss += loss.item() * inputs.size(0)
-        tot_correct += torch.sum(preds == labels.data).item()
-        tot_lsl += lsl.item() * inputs.size(0)
-        tot_lss_1 += lss_1.item() * inputs.size(0)
-        tot_lss_2 += lss_2.item() * inputs.size(0)
-        tot_lsd += lsd.item() * inputs.size(0)
+            tot_loss += loss.item() * inputs.size(0)
+            tot_correct += torch.sum(preds == labels.data).item()
+            tot_lsl += lsl.item() * inputs.size(0)
+            tot_lss_1 += lss_1.item() * inputs.size(0)
+            tot_lss_2 += lss_2.item() * inputs.size(0)
+            tot_lsd += lsd.item() * inputs.size(0)
 
     len_ = len(train_loader.dataset)
     epoch_loss = tot_loss / len_
@@ -202,7 +204,7 @@ if __name__ == "__main__":
 
     best_acc = 0.0
     for epoch in range(epochs):
-        print("-" * 5 + "Epoch:  %3d/%3d" % (epoch, epochs) + "-" * 5)
+        print("-" * 5 + "Epoch:  %3d/%3d" % (epoch + 1, epochs) + "-" * 5)
         train_result = train()
         valid_result = valid()
         writer.writerow(train_result+valid_result)
