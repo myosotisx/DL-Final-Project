@@ -193,14 +193,23 @@ class ResNetMod(nn.Module):
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
         ## attention module
-        self.atten = AttentionBlock(1, 2048, 3)
+        ## for ResNet50
+        # self.atten = AttentionBlock(1, 2048, 3)
+        ## for ResNet18
+        self.atten = AttentionBlock(1, 512, 3)
 
         ## auxiliary layer for calculating M_hat, same as attention module
-        self.auxiliary_layer = AttentionBlock(1, 2048, 3)
+        ## for ResNet50
+        # self.auxiliary_layer = AttentionBlock(1, 2048, 3)
+        ## for ResNet18
+        self.auxiliary_layer = AttentionBlock(1, 512, 3)
 
-        # modify
+        ## Spatial Logits
         self.num_classes = num_classes  # CIFAR 10 num_classes = 10
-        self.resizeMap = ResizeMapBlock([8, 4, 2, 1], [256, 512, 1024, 2048], self.num_classes, 3)
+        ## for ResNet50
+        # self.resizeMap = ResizeMapBlock([8, 4, 2, 1], [256, 512, 1024, 2048], self.num_classes, 3)
+        ## for ResNet18
+        self.resizeMap = ResizeMapBlock([8, 4, 2, 1], [64, 128, 256, 512], self.num_classes, 3)
         self.cat_channels = 4 * self.num_classes
         self.remap = nn.Sequential(
             nn.BatchNorm2d(self.cat_channels),
@@ -299,6 +308,17 @@ def _resnet(arch, block, layers, pretrained, progress, **kwargs):
 
 
 def resnet18(pretrained=False, progress=True, **kwargs):
+    r"""ResNet-18 model from
+    `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+        progress (bool): If True, displays a progress bar of the download to stderr
+    """
+    return _resnet('resnet18', BasicBlock, [2, 2, 2, 2], pretrained, progress,
+                   **kwargs)
+
+def resnet18_mod(pretrained=False, progress=True, **kwargs):
     r"""ResNet-18 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_
 

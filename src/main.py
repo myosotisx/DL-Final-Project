@@ -76,7 +76,8 @@ def train():
         lss_2 = criterion_lss2(M[0, 0, :, :] * Y_cutmix, M[0, 0, :, :] * Y_a)
         lsd = criterion_lss2(outputs, pool_outputs.detach()) + 0.5 * (lam * criterion_ce(pool_outputs, labels_a) + (1 - lam) * criterion_ce(pool_outputs, labels))
 
-        loss = lsl + lss_1 + lss_2 + lsd
+        # loss = lsl + lss_1 + lss_2 + lsd
+        loss = lsl
         loss.backward()
         optimizer.step()
 
@@ -148,7 +149,8 @@ def valid():
             lsd = criterion_lss2(outputs, pool_outputs.detach()) + 0.5 * (
                         lam * criterion_ce(pool_outputs, labels_a) + (1 - lam) * criterion_ce(pool_outputs, labels))
 
-            loss = lsl + lss_1 + lss_2 + lsd
+            # loss = lsl + lss_1 + lss_2 + lsd
+            loss = lsl
 
             _, preds = torch.max(outputs, 1)
             _, labels = torch.max(label_cutmix, 1)
@@ -182,9 +184,9 @@ if __name__ == "__main__":
 
     # Hyperparameter
     epochs = 100
-    lr = 0.001
+    lr = 0.01
 
-    train_loader, valid_loader = data.load_data(batch_size=32)
+    train_loader, valid_loader = data.load_data(batch_size=64)
     print("Train samples: %d" % len(train_loader.dataset))
     print("Valid samples: %d" % len(valid_loader.dataset))
     model = model.model()
@@ -194,7 +196,7 @@ if __name__ == "__main__":
     criterion_lss2 = nn.KLDivLoss(reduction='batchmean')
     criterion_ce = nn.CrossEntropyLoss()
 
-    optimizer = optim.SGD(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
 
     time_str = time.strftime("%m_%d-%Hh%Mm%Ss", time.localtime())
     file = open("../log/%s.csv" % time_str, 'w')
