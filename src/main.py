@@ -48,7 +48,7 @@ def train():
         rand_index = torch.randperm(inputs.size()[0])
         x_cutmix = inputs.clone().detach()
         x_a = inputs[rand_index, :, :, :]
-        label_a = label_original[rand_index, :]
+        labels_a = labels[rand_index]
         bbx1, bby1, bbx2, bby2 = rand_bbox(inputs.size(), lam)
         M = torch.zeros((inputs.size()[-2], inputs.size()[-1]))
 
@@ -57,7 +57,7 @@ def train():
         M[bbx1:bbx2, bby1:bby2] = 1
         x_cutmix[:, :, bbx1:bbx2, bby1:bby2] = x_a[:, :, bbx1:bbx2, bby1:bby2]
         lam = ((bbx2 - bbx1) * (bby2 - bby1) / (inputs.size()[-1] * inputs.size()[-2]))
-        label_cutmix = lam * label_a + (1 - lam) * label_original
+        label_cutmix = lam * label_original[rand_index, :] + (1 - lam) * label_original
 
         # x_a
         model.eval()
@@ -74,13 +74,12 @@ def train():
         M_resizer = torch.nn.MaxPool2d(int(M.size()[-1] / M_hat.size()[-1]))
         M = M_resizer(M)
 
-        lsl = criterion_ce(outputs, labels)
+        lsl = lam * criterion_ce(outputs, labels_a) + (1 - lam) * criterion_ce(outputs, labels)
         lss_1 = criterion_lss1(M_hat, M)
         lss_2 = criterion_lss2(M[0, 0, :, :] * Y_cutmix, M[0, 0, :, :] * Y_a)
-        lsd = criterion_lss2(outputs, pool_outputs) + 0.5 * criterion_ce(pool_outputs, labels)
+        lsd = criterion_lss2(outputs, pool_outputs.detach()) + 0.5 * (lam * criterion_ce(pool_outputs, labels_a) + (1 - lam) * criterion_ce(pool_outputs, labels))
 
-        # loss = lsl + lss_1 + lss_2 + lsd
-        loss = lsl + lss_1 + lss_2
+        loss = lsl + lss_1 + lss_2 + lsd
         # print("lsl", lsl.item())
         # print("lss_1", lss_1.item())
         # print("lss_2", lss_2.item())
@@ -126,7 +125,7 @@ def valid():
         rand_index = torch.randperm(inputs.size()[0])
         x_cutmix = inputs.clone().detach()
         x_a = inputs[rand_index, :, :, :]
-        label_a = label_original[rand_index, :]
+        labels_a = labels[rand_index]
         bbx1, bby1, bbx2, bby2 = rand_bbox(inputs.size(), lam)
         M = torch.zeros((inputs.size()[-2], inputs.size()[-1]))
 
@@ -135,7 +134,7 @@ def valid():
         M[bbx1:bbx2, bby1:bby2] = 1
         x_cutmix[:, :, bbx1:bbx2, bby1:bby2] = x_a[:, :, bbx1:bbx2, bby1:bby2]
         lam = ((bbx2 - bbx1) * (bby2 - bby1) / (inputs.size()[-1] * inputs.size()[-2]))
-        label_cutmix = lam * label_a + (1 - lam) * label_original
+        label_cutmix = lam * label_original[rand_index, :] + (1 - lam) * label_original
 
         # x_a
         model.eval()
@@ -143,8 +142,8 @@ def valid():
             _dummy1, _dummy2, _dummpy3, Y_a = model(x_a)
         # CutMix
         # model.train(True)
-        optimizer.zero_grad()
-        outputs, pool_outputs, M_hat, Y_cutmix = model(x_cutmix)
+            optimizer.zero_grad()
+            outputs, pool_outputs, M_hat, Y_cutmix = model(x_cutmix)
 
         # Resize M to H0 * W0
         M = M.unsqueeze(dim=0).unsqueeze(dim=1)
@@ -152,13 +151,12 @@ def valid():
         M_resizer = torch.nn.MaxPool2d(int(M.size()[-1] / M_hat.size()[-1]))
         M = M_resizer(M)
 
-        lsl = criterion_ce(outputs, labels)
+        lsl = lam * criterion_ce(outputs, labels_a) + (1 - lam) * criterion_ce(outputs, labels)
         lss_1 = criterion_lss1(M_hat, M)
         lss_2 = criterion_lss2(M[0, 0, :, :] * Y_cutmix, M[0, 0, :, :] * Y_a)
-        lsd = criterion_lss2(outputs, pool_outputs) + 0.5 * criterion_ce(pool_outputs, labels)
+        lsd = criterion_lss2(outputs, pool_outputs.detach()) + 0.5 * (lam * criterion_ce(pool_outputs, labels_a) + (1 - lam) * criterion_ce(pool_outputs, labels))
 
-        # loss = lsl + lss_1 + lss_2 + lsd
-        loss = lsl + lss_1 + lss_2
+        loss = lsl + lss_1 + lss_2 + lsd
 
         _, preds = torch.max(outputs, 1)
         _, labels = torch.max(label_cutmix, 1)
@@ -194,7 +192,7 @@ if __name__ == "__main__":
     epochs = 100
     lr = 0.001
 
-    train_loader, valid_loader = data.load_data(batch_size=64)
+    train_loader, valid_loader = data.load_data(batch_size=32)
     print("Train samples: %d" % len(train_loader.dataset))
     print("Valid samples: %d" % len(valid_loader.dataset))
     model = model.model()
