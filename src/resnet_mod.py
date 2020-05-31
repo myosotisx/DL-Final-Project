@@ -282,17 +282,18 @@ class ResNetMod(nn.Module):
         att = self.atten(l4)
 
         ## M_hat
-        M_hat = self.auxiliary_layer(l4)
+        # M_hat = self.auxiliary_layer(l4)
 
         output = (att * rml).view(rml.size(0), rml.size(1), -1).sum(-1)
 
         # output of avg pool method
-        pool_output = self.avgpool(l4)
-        pool_output = torch.flatten(pool_output, 1)
-        pool_output = self.fc(pool_output)
+        # pool_output = self.avgpool(l4)
+        # pool_output = torch.flatten(pool_output, 1)
+        # pool_output = self.fc(pool_output)
 
         # return N * num_classes and M_hat(H_0 * W_0) and Spatial Logits
-        return output, pool_output, M_hat, rml
+        # return output, pool_output, M_hat, rml
+        return output
 
     def forward(self, x):
         return self._forward_impl(x)
