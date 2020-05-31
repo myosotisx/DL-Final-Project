@@ -35,10 +35,12 @@ def train():
     tot_lss_1 = 0.0
     tot_lss_2 = 0.0
     tot_lsd = 0.0
+    # itr = 0
     for inputs, labels in train_loader:
+        # print("iteration: ", itr)
+        # itr += 1
         inputs = inputs.to(device)
         labels = labels.to(device)
-        optimizer.zero_grad()
 
         # CutMix regularizer
         label_original = F.one_hot(labels, 10)
@@ -63,7 +65,8 @@ def train():
             _dummy1, _dummy2, _dummpy3, Y_a = model(x_a)
         # CutMix
         model.train(True)
-        outputs, pool_outputs, M_hat, Y_cutmix = model(inputs)
+        optimizer.zero_grad()
+        outputs, pool_outputs, M_hat, Y_cutmix = model(x_cutmix)
 
         # Resize M to H0 * W0
         M = M.unsqueeze(dim=0).unsqueeze(dim=1)
@@ -76,7 +79,12 @@ def train():
         lss_2 = criterion_lss2(M[0, 0, :, :] * Y_cutmix, M[0, 0, :, :] * Y_a)
         lsd = criterion_lss2(outputs, pool_outputs) + 0.5 * criterion_ce(pool_outputs, labels)
 
-        loss = lsl + lss_1 + lss_2 + lsd
+        # loss = lsl + lss_1 + lss_2 + lsd
+        loss = lsl + lss_1 + lss_2
+        # print("lsl", lsl.item())
+        # print("lss_1", lss_1.item())
+        # print("lss_2", lss_2.item())
+        # print("lsd", lsd.item())
         loss.backward()
         optimizer.step()
 
@@ -108,7 +116,6 @@ def valid():
     tot_lss_1 = 0.0
     tot_lss_2 = 0.0
     tot_lsd = 0.0
-    model.eval()
     for inputs, labels in valid_loader:
         inputs = inputs.to(device)
         labels = labels.to(device)
@@ -131,9 +138,13 @@ def valid():
         label_cutmix = lam * label_a + (1 - lam) * label_original
 
         # x_a
-        _dummy1, _dummy2, _dummpy3, Y_a = model(x_a)
+        model.eval()
+        with torch.no_grad():
+            _dummy1, _dummy2, _dummpy3, Y_a = model(x_a)
         # CutMix
-        outputs, pool_outputs, M_hat, Y_cutmix = model(inputs)
+        # model.train(True)
+        optimizer.zero_grad()
+        outputs, pool_outputs, M_hat, Y_cutmix = model(x_cutmix)
 
         # Resize M to H0 * W0
         M = M.unsqueeze(dim=0).unsqueeze(dim=1)
@@ -146,7 +157,8 @@ def valid():
         lss_2 = criterion_lss2(M[0, 0, :, :] * Y_cutmix, M[0, 0, :, :] * Y_a)
         lsd = criterion_lss2(outputs, pool_outputs) + 0.5 * criterion_ce(pool_outputs, labels)
 
-        loss = lsl + lss_1 + lss_2 + lsd
+        # loss = lsl + lss_1 + lss_2 + lsd
+        loss = lsl + lss_1 + lss_2
 
         _, preds = torch.max(outputs, 1)
         _, labels = torch.max(label_cutmix, 1)
@@ -180,9 +192,11 @@ if __name__ == "__main__":
 
     # Hyperparameter
     epochs = 100
-    lr = 0.01
+    lr = 0.001
 
-    train_loader, valid_loader = data.load_data()
+    train_loader, valid_loader = data.load_data(batch_size=64)
+    print("Train samples: %d" % len(train_loader.dataset))
+    print("Valid samples: %d" % len(valid_loader.dataset))
     model = model.model()
     model = model.to(device)
 
@@ -190,10 +204,10 @@ if __name__ == "__main__":
     criterion_lss2 = nn.KLDivLoss(reduction='batchmean')
     criterion_ce = nn.CrossEntropyLoss()
 
-    optimizer = optim.Adam(params=model.parameters(), lr=lr)
+    optimizer = optim.SGD(model.parameters(), lr=lr)
 
     time_str = time.strftime("%m_%d-%Hh%Mm%Ss", time.localtime())
-    file = open("%s.csv" % time_str, 'w')
+    file = open("../log/%s.csv" % time_str, 'w')
     writer = csv.writer(file)
     headers = ["train_loss", "train_acc", "train_lsl", "train_lss_1", "train_lss_2", "train_lsd",
                "valid_loss", "valid_acc", "valid_lsl", "valid_lss_1", "valid_lss_2", "valid_lsd"]
