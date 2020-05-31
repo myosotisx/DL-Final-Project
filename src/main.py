@@ -35,10 +35,7 @@ def train():
     tot_lss_1 = 0.0
     tot_lss_2 = 0.0
     tot_lsd = 0.0
-    # itr = 0
     for inputs, labels in train_loader:
-        # print("iteration: ", itr)
-        # itr += 1
         inputs = inputs.to(device)
         labels = labels.to(device)
 
@@ -61,10 +58,9 @@ def train():
 
         # x_a
         model.eval()
-        with torch.no_grad():
-            _dummy1, _dummy2, _dummpy3, Y_a = model(x_a)
+        _dummy1, _dummy2, _dummpy3, Y_a = model(x_a)
         # CutMix
-        model.train(True)
+        model.train()
         optimizer.zero_grad()
         outputs, pool_outputs, M_hat, Y_cutmix = model(x_cutmix)
 
@@ -80,10 +76,6 @@ def train():
         lsd = criterion_lss2(outputs, pool_outputs.detach()) + 0.5 * (lam * criterion_ce(pool_outputs, labels_a) + (1 - lam) * criterion_ce(pool_outputs, labels))
 
         loss = lsl + lss_1 + lss_2 + lsd
-        # print("lsl", lsl.item())
-        # print("lss_1", lss_1.item())
-        # print("lss_2", lss_2.item())
-        # print("lsd", lsd.item())
         loss.backward()
         optimizer.step()
 
@@ -115,6 +107,7 @@ def valid():
     tot_lss_1 = 0.0
     tot_lss_2 = 0.0
     tot_lsd = 0.0
+    model.eval()
     for inputs, labels in valid_loader:
         inputs = inputs.to(device)
         labels = labels.to(device)
@@ -137,13 +130,9 @@ def valid():
         label_cutmix = lam * label_original[rand_index, :] + (1 - lam) * label_original
 
         # x_a
-        model.eval()
-        with torch.no_grad():
-            _dummy1, _dummy2, _dummpy3, Y_a = model(x_a)
+        _dummy1, _dummy2, _dummpy3, Y_a = model(x_a)
         # CutMix
-        # model.train(True)
-            optimizer.zero_grad()
-            outputs, pool_outputs, M_hat, Y_cutmix = model(x_cutmix)
+        outputs, pool_outputs, M_hat, Y_cutmix = model(x_cutmix)
 
         # Resize M to H0 * W0
         M = M.unsqueeze(dim=0).unsqueeze(dim=1)
@@ -154,7 +143,8 @@ def valid():
         lsl = lam * criterion_ce(outputs, labels_a) + (1 - lam) * criterion_ce(outputs, labels)
         lss_1 = criterion_lss1(M_hat, M)
         lss_2 = criterion_lss2(M[0, 0, :, :] * Y_cutmix, M[0, 0, :, :] * Y_a)
-        lsd = criterion_lss2(outputs, pool_outputs.detach()) + 0.5 * (lam * criterion_ce(pool_outputs, labels_a) + (1 - lam) * criterion_ce(pool_outputs, labels))
+        lsd = criterion_lss2(outputs, pool_outputs.detach()) + 0.5 * (
+                    lam * criterion_ce(pool_outputs, labels_a) + (1 - lam) * criterion_ce(pool_outputs, labels))
 
         loss = lsl + lss_1 + lss_2 + lsd
 
@@ -210,6 +200,7 @@ if __name__ == "__main__":
     headers = ["train_loss", "train_acc", "train_lsl", "train_lss_1", "train_lss_2", "train_lsd",
                "valid_loss", "valid_acc", "valid_lsl", "valid_lss_1", "valid_lss_2", "valid_lsd"]
 
+    best_acc = 0.0
     for epoch in range(epochs):
         print("-" * 5 + "Epoch:  %3d/%3d" % (epoch, epochs) + "-" * 5)
         train_result = train()
@@ -217,6 +208,10 @@ if __name__ == "__main__":
         writer.writerow(train_result+valid_result)
         print("Train Loss: %f Train Accuracy: %f" % (train_result[0], train_result[1]))
         print("Valid Loss: %f Valid Accuracy: %f" % (valid_result[0], valid_result[1]))
+        if valid_result[1] > best_acc:
+            best_acc = valid_result[1]
+            print("\n- Saving best model at epoch: %d\n" % (epoch + 1))
+            torch.save(model, "../model/%s_best.pt" % time_str)
         print("-"*25)
 
     file.close()
